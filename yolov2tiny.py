@@ -184,7 +184,14 @@ class YOLO2_TINY(object):
         #
         # Your code from here. You may clear the comments.
         #
-        raise NotImplementedError('get_y2t_w is not implemented yet')
+        #raise NotImplementedError('get_y2t_w is not implemented yet')
+        model = onnx.load(self.onnx_path)
+
+        y2t_w = {}
+
+        for initializer in model.graph.initializer:
+            weight = np.array(initializer.float_data, dtype=np.float32)
+            y2t_w[initializer.name] = weight.reshape(initializer.dims)
 
         return y2t_w
 
@@ -194,10 +201,10 @@ class YOLO2_TINY(object):
         #
         # Your code from here. You may clear the comments.
         #
-        raise NotImplementedError('build_graph is not implemented yet')
+        #raise NotImplementedError('build_graph is not implemented yet')
 
         # Load weight parameters from the ONNX file.
-        _ = self.get_y2t_w()
+        y2t_w = self.get_y2t_w()
 
         # Create an empty list for tensors.
         nodes = []
@@ -212,6 +219,85 @@ class YOLO2_TINY(object):
         # build a graph and append the tensors to the returning list for computing intermediate
         # values. One tip is to start adding a placeholder tensor for the first tensor.
         # (Use 1e-5 for the epsilon value of batch normalization layers.)
+        with self.g.as_default() as g:
+            with g.device(self.proc):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=in_shape)
+                #image2 = inp * y2t_w['scalerPreprocessor_scale'] + tf.transpose(y2t_w['scalerPreprocessor_bias'])
+
+                convolution2d_1_output = tf.nn.conv2d(inp, tf.transpose(y2t_w['convolution_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+
+                batchnormalization_1_output = tf.nn.batch_normalization(convolution2d_1_output, y2t_w['BatchNormalization_mean'], y2t_w['BatchNormalization_variance'], y2t_w['BatchNormalization_B'], y2t_w['BatchNormalization_scale'], variance_epsilon=1e-5)
+                leakyrelu_1_output = tf.nn.leaky_relu(batchnormalization_1_output, alpha=0.10000000149011612)
+                maxpooling2d_1_output = tf.nn.max_pool2d(leakyrelu_1_output, [2, 2], [2, 2], 'SAME')
+                convolution2d_2_output = tf.nn.conv2d(maxpooling2d_1_output, tf.transpose(y2t_w['convolution1_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+
+                batchnormalization_2_output = tf.nn.batch_normalization(convolution2d_2_output, y2t_w['BatchNormalization_mean1'], y2t_w['BatchNormalization_variance1'], y2t_w['BatchNormalization_B1'], y2t_w['BatchNormalization_scale1'], variance_epsilon=1e-5)
+                leakyrelu_2_output = tf.nn.leaky_relu(batchnormalization_2_output, alpha=0.10000000149011612)
+                maxpooling2d_2_output = tf.nn.max_pool2d(leakyrelu_2_output, [2, 2], [2, 2], 'SAME')
+                convolution2d_3_output = tf.nn.conv2d(maxpooling2d_2_output, tf.transpose(y2t_w['convolution2_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+
+                batchnormalization_3_output = tf.nn.batch_normalization(convolution2d_3_output, y2t_w['BatchNormalization_mean2'], y2t_w['BatchNormalization_variance2'], y2t_w['BatchNormalization_B2'], y2t_w['BatchNormalization_scale2'], variance_epsilon=1e-5)
+                leakyrelu_3_output = tf.nn.leaky_relu(batchnormalization_3_output, alpha=0.10000000149011612)
+                maxpooling2d_3_output = tf.nn.max_pool2d(leakyrelu_3_output, [2, 2], [2, 2], 'SAME')
+                convolution2d_4_output = tf.nn.conv2d(maxpooling2d_3_output, tf.transpose(y2t_w['convolution3_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+
+                batchnormalization_4_output = tf.nn.batch_normalization(convolution2d_4_output, y2t_w['BatchNormalization_mean3'], y2t_w['BatchNormalization_variance3'], y2t_w['BatchNormalization_B3'], y2t_w['BatchNormalization_scale3'], variance_epsilon=1e-5)
+                leakyrelu_4_output = tf.nn.leaky_relu(batchnormalization_4_output, alpha=0.10000000149011612)
+                maxpooling2d_4_output = tf.nn.max_pool2d(leakyrelu_4_output, [2, 2], [2, 2], 'SAME')
+                convolution2d_5_output = tf.nn.conv2d(maxpooling2d_4_output, tf.transpose(y2t_w['convolution4_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+
+                batchnormalization_5_output = tf.nn.batch_normalization(convolution2d_5_output, y2t_w['BatchNormalization_mean4'], y2t_w['BatchNormalization_variance4'], y2t_w['BatchNormalization_B4'], y2t_w['BatchNormalization_scale4'], variance_epsilon=1e-5)
+                leakyrelu_5_output = tf.nn.leaky_relu(batchnormalization_5_output, alpha=0.10000000149011612)
+                maxpooling2d_5_output = tf.nn.max_pool2d(leakyrelu_5_output, [2, 2], [2, 2], 'SAME')
+                convolution2d_6_output = tf.nn.conv2d(maxpooling2d_5_output, tf.transpose(y2t_w['convolution5_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+
+                batchnormalization_6_output = tf.nn.batch_normalization(convolution2d_6_output, y2t_w['BatchNormalization_mean5'], y2t_w['BatchNormalization_variance5'], y2t_w['BatchNormalization_B5'], y2t_w['BatchNormalization_scale5'], variance_epsilon=1e-5)
+                leakyrelu_6_output = tf.nn.leaky_relu(batchnormalization_6_output, alpha=0.10000000149011612)
+                maxpooling2d_6_output = tf.nn.max_pool2d(leakyrelu_6_output, [2, 2], [1, 1], 'SAME')
+                convolution2d_7_output = tf.nn.conv2d(maxpooling2d_6_output, tf.transpose(y2t_w['convolution6_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+
+                batchnormalization_7_output = tf.nn.batch_normalization(convolution2d_7_output, y2t_w['BatchNormalization_mean6'], y2t_w['BatchNormalization_variance6'], y2t_w['BatchNormalization_B6'], y2t_w['BatchNormalization_scale6'], variance_epsilon=1e-5)
+                leakyrelu_7_output = tf.nn.leaky_relu(batchnormalization_7_output, alpha=0.10000000149011612)
+                convolution2d_8_output = tf.nn.conv2d(leakyrelu_7_output, tf.transpose(y2t_w['convolution7_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+
+                batchnormalization_8_output = tf.nn.batch_normalization(convolution2d_8_output, y2t_w['BatchNormalization_mean7'], y2t_w['BatchNormalization_variance7'], y2t_w['BatchNormalization_B7'], y2t_w['BatchNormalization_scale7'], variance_epsilon=1e-5)
+                leakyrelu_8_output = tf.nn.leaky_relu(batchnormalization_8_output, alpha=0.10000000149011612)
+                convolution2d_9_output = tf.nn.conv2d(leakyrelu_8_output, tf.transpose(y2t_w['convolution8_W'], perm=[2, 3, 1, 0]), strides=[1, 1], padding='SAME')
+                grid = tf.nn.bias_add(convolution2d_9_output, y2t_w['convolution8_B'], data_format="NHWC")
+
+                nodes.extend([#image2,
+                              convolution2d_1_output,
+                              batchnormalization_1_output,
+                              leakyrelu_1_output,
+                              maxpooling2d_1_output,
+                              convolution2d_2_output,
+                              batchnormalization_2_output,
+                              leakyrelu_2_output,
+                              maxpooling2d_2_output,
+                              convolution2d_3_output,
+                              batchnormalization_3_output,
+                              leakyrelu_3_output,
+                              maxpooling2d_3_output,
+                              convolution2d_4_output,
+                              batchnormalization_4_output,
+                              leakyrelu_4_output,
+                              maxpooling2d_4_output,
+                              convolution2d_5_output,
+                              batchnormalization_5_output,
+                              leakyrelu_5_output,
+                              maxpooling2d_5_output,
+                              convolution2d_6_output,
+                              batchnormalization_6_output,
+                              leakyrelu_6_output,
+                              maxpooling2d_6_output,
+                              convolution2d_7_output,
+                              batchnormalization_7_output,
+                              leakyrelu_7_output,
+                              convolution2d_8_output,
+                              batchnormalization_8_output,
+                              leakyrelu_8_output,
+                              convolution2d_9_output,
+                              grid])
 
         # Return the start tensor and the list of all tensors.
         return inp, nodes
