@@ -120,42 +120,278 @@ class DnnNode(object):
 
 class Conv2D(DnnNode):
     def __init__(self, name, in_node, kernel, strides, padding):
-        raise NotImplementedError('Conv2d is not implemented yet')
+        #raise NotImplementedError('Conv2d is not implemented yet')
+        assert in_node.shape[3] == kernel.shape[2]
+        self.name = name
+        self.in_node = in_node
+        self.kernel = kernel
+        self.strides = self.get_strides(strides)
+        self.is_pad_same = self.is_pad_same(padding)
+        self.shape = (in_node.shape[0], in_node.shape[1], in_node.shape[2], kernel.shape[3])
+        print(self.name)
+
+    def get_strides(self, strides):
+        num = len(strides)
+        if num == 4:
+            return [strides[1], strides[2]]
+        elif num == 2:
+            return strides
+        elif num == 1:
+            return [strides[0], strides[0]]
+        else:
+            raise Exception('The length of strides option should be 1 or 2 or 4')
+
+    def is_pad_same(self, padding):
+        if padding == 'SAME':
+            return True
+        elif padding == 'VALID':
+            return False
+        else:
+            raise NotImplementedError('The padding option should be SAME or VALID')
+
+    def get_output_size(self, in_size, kernel_size, stride_size):
+        if self.is_pad_same:
+            return np.ceil(in_size / stride_size)
+        else:
+            return np.ceil((in_size - kernel_size + 1) / stride_size)
+
+    def get_padding_size(self, in_size, kernel_size, stride_size, out_size):
+        if self.is_pad_same:
+            return max((out_size - 1) * stride_size + kernel_size - in_size, 0)
+        else:
+            return 0
+
+    def mul(self, x, w, start, step):
+        arr = np.frombuffer(self.arr.get_obj())
+        c = arr.reshape(x.shape[0], w.shape[1])
+        for i in range(start, start + step):
+            for j in range(w.shape[1]):
+                for k in range(x.shape[1]):
+                    c[i][j] += x[i][k] * w[k][j]
 
     def run(self, counter):
-        pass
+        in_n, in_h, in_w, in_c = self.in_node.shape
+        kernel_h, kernel_w, kernel_i, kernel_o = self.kernel.shape
+        stride_h, stride_w = self.strides
+
+        out_h = int(self.get_output_size(in_h, kernel_h, stride_h))
+        out_w = int(self.get_output_size(in_w, kernel_w, stride_w))
+
+        pad_h = int(self.get_padding_size(in_h, kernel_h, stride_h, out_h))
+        pad_w = int(self.get_padding_size(in_w, kernel_w, stride_w, out_w))
+
+        # UPPER_SAME
+        pad_h_upper = int(np.floor(pad_h / 2))
+        pad_h_lower = int(np.ceil(pad_h / 2))
+        pad_w_upper = int(np.floor(pad_w / 2))
+        pad_w_lower = int(np.ceil(pad_w / 2))
+        pad = ((0, 0), (pad_h_upper, pad_h_lower), (pad_w_upper, pad_w_lower), (0, 0))
+
+        in_pad = np.pad(self.in_node.result, pad)
+
+        x = np.zeros([in_n, out_h, out_w, kernel_h, kernel_w, in_c])
+        for i in range(out_h):
+            ih = i * stride_h
+            for j in range(out_w):
+                jw = j * stride_w
+                x[:, i, j, :, :, :] = in_pad[:, ih:ih + kernel_h, jw:jw + kernel_w, :]
+
+        x_shape = x.shape
+        x = x.reshape([x_shape[0] * x_shape[1] * x_shape[2], -1])
+
+        w = self.kernel.reshape([kernel_h * kernel_w * kernel_i, kernel_o])
+
+        #self.result = x.dot(w)
+
+        #self.result = np.zeros([x.shape[0], w.shape[1]])
+        #for i in range(x.shape[0]):
+        #    for j in range(w.shape[1]):
+        #        for k in range(x.shape[1]):
+        #            self.result[i][j] += x[i][k] * w[k][j]
+
+        self.arr = sharedctypes.Array('d', x.shape[0] * w.shape[1])
+        proc_num = os.cpu_count()
+        step = int(x.shape[0] / proc_num)
+        procs =[]
+
+        for i in range(0, proc_num):
+            proc = Process(target=self.mul, args=(x, w, step * i, step))
+            procs.append(proc)
+            proc.start()
+
+        remain = x.shape[0] % proc_num
+        if remain != 0:
+            proc = Process(target=self.mul, args=(x, w, step * proc_num, remain))
+            procs.append(proc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
+
+        self.result = np.frombuffer(self.arr.get_obj())
+        self.result = self.result.reshape([x_shape[0], x_shape[1], x_shape[2], -1])
 
 
 class BiasAdd(DnnNode):
     def __init__(self, name, in_node, biases):
-        raise NotImplementedError('BiasAdd is not implemented yet')
+        #raise NotImplementedError('BiasAdd is not implemented yet')
+        assert all((m == n) or (m == 1) or (n == 1) for m, n in zip(in_node.shape[::-1], biases.shape[::-1]))
+        self.name = name
+        self.in_node = in_node
+        self.biases = biases
+        self.shape = in_node.shape
+        print(self.name)
 
     def run(self, counter):
-        pass
+        #self.result = self.in_node.result + self.biases
+        in_shape = self.in_node.shape
+        x = self.in_node.result.reshape([-1, in_shape[3]])
+
+        self.result = np.zeros(x.shape)
+        for i in range(x.shape[0]):
+            for j in range(x.shape[1]):
+                self.result[i][j] = x[i][j] + self.biases[j]
+        self.result = self.result.reshape(in_shape)
 
 
 class MaxPool2D(DnnNode):
     def __init__(self, name, in_node, ksize, strides, padding):
-        raise NotImplementedError('MaxPool2D is not implemented yet')
+        #raise NotImplementedError('MaxPool2D is not implemented yet')
+        assert in_node.shape[0] > 0
+        self.name = name
+        self.in_node = in_node
+        self.ksize = self.get_ksize(ksize)
+        self.strides = self.get_strides(strides)
+        self.is_pad_same = self.is_pad_same(padding)
+        self.shape = (in_node.shape[0], int(np.ceil(in_node.shape[1]/self.strides[0])), int(np.ceil(in_node.shape[2]/self.strides[1])), in_node.shape[3])
+        print(self.name)
+
+    def get_ksize(self, ksize):
+        num = len(ksize)
+        if num == 4:
+            return [ksize[1], ksize[2]]
+        elif num == 2:
+            return ksize
+        elif num == 1:
+            return [ksize[0], ksize[0]]
+        else:
+            raise Exception('The length of ksize option should be 1 or 2 or 4')
+
+    def get_strides(self, strides):
+        num = len(strides)
+        if num == 4:
+            return [strides[1], strides[2]]
+        elif num == 2:
+            return strides
+        elif num == 1:
+            return [strides[0], strides[0]]
+        else:
+            raise Exception('The length of strides option should be 1 or 2 or 4')
+
+    def is_pad_same(self, padding):
+        if padding == 'SAME':
+            return True
+        elif padding == 'VALID':
+            return False
+        else:
+            raise NotImplementedError('The padding option should be SAME or VALID')
+
+    def get_output_size(self, in_size, kernel_size, stride_size):
+        if stride_size == 1:
+            return in_size
+        else:
+            return 1 + (in_size - kernel_size) / stride_size
+
+    def get_padding_size(self, in_size, kernel_size, stride_size, out_size):
+        if self.is_pad_same:
+            return max((out_size - 1) * stride_size + kernel_size - in_size, 0)
+        else:
+            return 0
 
     def run(self, counter):
-        pass
+        in_n, in_h, in_w, in_c = self.in_node.shape
+        kernel_h, kernel_w = self.ksize
+        stride_h, stride_w = self.strides
+
+        out_h = int(self.get_output_size(in_h, kernel_h, stride_h))
+        out_w = int(self.get_output_size(in_w, kernel_w, stride_w))
+
+        pad_h = int(self.get_padding_size(in_h, kernel_h, stride_h, out_h))
+        pad_w = int(self.get_padding_size(in_w, kernel_w, stride_w, out_w))
+
+        # UPPER_SAME
+        pad_h_upper = int(np.floor(pad_h / 2))
+        pad_h_lower = int(np.ceil(pad_h / 2))
+        pad_w_upper = int(np.floor(pad_w / 2))
+        pad_w_lower = int(np.ceil(pad_w / 2))
+        pad = ((0, 0), (pad_h_upper, pad_h_lower), (pad_w_upper, pad_w_lower), (0, 0))
+
+        in_pad = np.pad(self.in_node.result, pad)
+
+        x = np.zeros([in_n, out_h, out_w, kernel_h, kernel_w, in_c])
+        for i in range(out_h):
+            ih = i * stride_h
+            for j in range(out_w):
+                jw = j * stride_w
+                x[:, i, j, :, :, :] = in_pad[:, ih:ih + kernel_h, jw:jw + kernel_w, :]
+
+        x_shape = x.shape
+        x = x.reshape([x_shape[0] * x_shape[1] * x_shape[2], x_shape[3] * x_shape[4], -1])
+
+        #self.result = np.max(x, axis=1)
+        self.result = np.zeros([x.shape[0], x.shape[2]])
+        for i in range(x.shape[0]):
+            for j in range(x.shape[1]):
+                for k in range(x.shape[2]):
+                    if self.result[i][k] == 0:
+                        self.result[i][k] = x[i][j][k]
+                    else:
+                        self.result[i][k] = max(self.result[i][k], x[i][j][k])
+        self.result = self.result.reshape([x_shape[0], x_shape[1], x_shape[2], -1])
 
 
 class BatchNorm(DnnNode):
     def __init__(self, name, in_node, mean, variance, gamma, epsilon):
-        raise NotImplementedError('BatchNorm is not implemented yet')
+        #raise NotImplementedError('BatchNorm is not implemented yet')
+        assert in_node.shape[3] == len(mean) == len(variance) == len(gamma)
+        self.name = name
+        self.in_node = in_node
+        self.mean = mean
+        self.variance = variance
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.shape = in_node.shape
+        print(self.name)
 
     def run(self, counter):
-        pass
+        in_shape = self.in_node.shape
+        x = self.in_node.result.reshape([-1, in_shape[3]])
+
+        self.result = np.zeros(x.shape)
+        for i in range(x.shape[0]):
+            for j in range(x.shape[1]):
+                self.result[i][j] = self.gamma[j] * (x[i][j] - self.mean[j]) / np.sqrt(self.variance[j] + self.epsilon)
+        self.result = self.result.reshape(in_shape)
 
 
 class LeakyReLU(DnnNode):
     def __init__(self, name, in_node):
-        raise NotImplementedError('LeakyReLU is not implemented yet')
+        #raise NotImplementedError('LeakyReLU is not implemented yet')
+        assert in_node.shape[0] > 0
+        self.name = name
+        self.in_node = in_node
+        self.alpha = 0.10000000149011612
+        self.shape = in_node.shape
+        print(self.name)
 
     def run(self, counter):
-        pass
+        in_shape = self.in_node.shape
+        x = self.in_node.result.reshape(-1)
+
+        self.result = np.zeros(x.shape)
+        for i in range(x.shape[0]):
+            self.result[i] = max(self.alpha * x[i], x[i])
+        self.result = self.result.reshape(in_shape)
 
 
 class Input(DnnNode):
@@ -163,6 +399,8 @@ class Input(DnnNode):
         self.name = name
         self.in_shape = in_shape
         self.result = np.ndarray(self.in_shape)
+        self.shape = self.in_shape
+        print(self.name)
 
     def set_input(self, tensor):
         assert tuple(self.in_shape) == tuple(tensor.shape)

@@ -199,8 +199,8 @@ class YOLO2_TINY(object):
         return _initializers
 
     def get_y2t_w(self):
-        with open("../../y2t_weights.pickle", "rb") as h:
-            pw = pickle.load(h, encoding='latin1')
+        #with open("../../y2t_weights.pickle", "rb") as h:
+        #    pw = pickle.load(h, encoding='latin1')
         y2t_w = {}
         perm = [2, 3, 1, 0]
         om = onnx.load(self.onnx_path)

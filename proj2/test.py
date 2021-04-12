@@ -82,6 +82,15 @@ class TestConv2D(unittest.TestCase):
             padding='FAIL'
         )
 
+    @unittest.expectedFailure
+    def test_dim_fail(self):
+        invalid_dim_conv2d = self.impl_g.create_conv2d(
+            self.impl_inp,
+            np.random.rand(3, 3, 1, 16),
+            strides=[1, 1, 1, 1],
+            padding='SAME'
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
