@@ -6,7 +6,8 @@ import numpy as np
 from itertools import product
 from multiprocessing import Process, sharedctypes
 
-parallelism = 8
+#parallelism = 8
+parallelism = os.cpu_count() - 1
 
 
 class DnnInferenceEngine(object):
@@ -167,7 +168,7 @@ class Conv2D(DnnNode):
         for i in range(start, start + step):
             for j in range(w.shape[1]):
                 for k in range(x.shape[1]):
-                    c[i][j] += x[i][k] * w[k][j]
+                    c[i, j] += x[i, k] * w[k, j]
 
     def run(self, counter):
         in_n, in_h, in_w, in_c = self.in_node.shape
@@ -207,21 +208,20 @@ class Conv2D(DnnNode):
         #for i in range(x.shape[0]):
         #    for j in range(w.shape[1]):
         #        for k in range(x.shape[1]):
-        #            self.result[i][j] += x[i][k] * w[k][j]
+        #            self.result[i, j] += x[i, k] * w[k, j]
 
         self.arr = sharedctypes.Array('d', x.shape[0] * w.shape[1])
-        proc_num = os.cpu_count()
-        step = int(x.shape[0] / proc_num)
+        step = int(x.shape[0] / parallelism)
         procs =[]
 
-        for i in range(0, proc_num):
+        for i in range(0, parallelism):
             proc = Process(target=self.mul, args=(x, w, step * i, step))
             procs.append(proc)
             proc.start()
 
-        remain = x.shape[0] % proc_num
+        remain = x.shape[0] % parallelism
         if remain != 0:
-            proc = Process(target=self.mul, args=(x, w, step * proc_num, remain))
+            proc = Process(target=self.mul, args=(x, w, step * parallelism, remain))
             procs.append(proc)
             proc.start()
 
@@ -242,15 +242,42 @@ class BiasAdd(DnnNode):
         self.shape = in_node.shape
         print(self.name)
 
+    def add(self, x, b, start, step):
+        arr = np.frombuffer(self.arr.get_obj())
+        c = arr.reshape(x.shape)
+        for i in range(start, start + step):
+            for j in range(x.shape[1]):
+                c[i, j] = x[i, j] + b[j]
+
     def run(self, counter):
         #self.result = self.in_node.result + self.biases
         in_shape = self.in_node.shape
         x = self.in_node.result.reshape([-1, in_shape[3]])
 
-        self.result = np.zeros(x.shape)
-        for i in range(x.shape[0]):
-            for j in range(x.shape[1]):
-                self.result[i][j] = x[i][j] + self.biases[j]
+        #self.result = np.zeros(x.shape)
+        #for i in range(x.shape[0]):
+        #    for j in range(x.shape[1]):
+        #        self.result[i, j] = x[i, j] + self.biases[j]
+
+        self.arr = sharedctypes.Array('d', x.shape[0] * x.shape[1])
+        step = int(x.shape[0] / parallelism)
+        procs =[]
+
+        for i in range(0, parallelism):
+            proc = Process(target=self.add, args=(x, self.biases, step * i, step))
+            procs.append(proc)
+            proc.start()
+
+        remain = x.shape[0] % parallelism
+        if remain != 0:
+            proc = Process(target=self.add, args=(x, self.biases, step * parallelism, remain))
+            procs.append(proc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
+
+        self.result = np.frombuffer(self.arr.get_obj())
         self.result = self.result.reshape(in_shape)
 
 
@@ -308,6 +335,17 @@ class MaxPool2D(DnnNode):
         else:
             return 0
 
+    def max(self, x, start, step):
+        arr = np.frombuffer(self.arr.get_obj())
+        c = arr.reshape(x.shape[0], x.shape[2])
+        for i in range(start, start + step):
+            for j in range(x.shape[1]):
+                for k in range(x.shape[2]):
+                    if c[i, k] == 0:
+                        c[i, k] = x[i, j, k]
+                    else:
+                        c[i, k] = max(c[i, k], x[i, j, k])
+
     def run(self, counter):
         in_n, in_h, in_w, in_c = self.in_node.shape
         kernel_h, kernel_w = self.ksize
@@ -339,14 +377,35 @@ class MaxPool2D(DnnNode):
         x = x.reshape([x_shape[0] * x_shape[1] * x_shape[2], x_shape[3] * x_shape[4], -1])
 
         #self.result = np.max(x, axis=1)
-        self.result = np.zeros([x.shape[0], x.shape[2]])
-        for i in range(x.shape[0]):
-            for j in range(x.shape[1]):
-                for k in range(x.shape[2]):
-                    if self.result[i][k] == 0:
-                        self.result[i][k] = x[i][j][k]
-                    else:
-                        self.result[i][k] = max(self.result[i][k], x[i][j][k])
+
+        #self.result = np.zeros([x.shape[0], x.shape[2]])
+        #for i in range(x.shape[0]):
+        #    for j in range(x.shape[1]):
+        #        for k in range(x.shape[2]):
+        #            if self.result[i, k] == 0:
+        #                self.result[i, k] = x[i, j, k]
+        #            else:
+        #                self.result[i, k] = max(self.result[i, k], x[i, j, k])
+
+        self.arr = sharedctypes.Array('d', x.shape[0] * x.shape[2])
+        step = int(x.shape[0] / parallelism)
+        procs =[]
+
+        for i in range(0, parallelism):
+            proc = Process(target=self.max, args=(x, step * i, step))
+            procs.append(proc)
+            proc.start()
+
+        remain = x.shape[0] % parallelism
+        if remain != 0:
+            proc = Process(target=self.max, args=(x, step * parallelism, remain))
+            procs.append(proc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
+
+        self.result = np.frombuffer(self.arr.get_obj())
         self.result = self.result.reshape([x_shape[0], x_shape[1], x_shape[2], -1])
 
 
@@ -363,14 +422,41 @@ class BatchNorm(DnnNode):
         self.shape = in_node.shape
         print(self.name)
 
+    def norm(self, x, gamma, mean, var, epsilon, start, step):
+        arr = np.frombuffer(self.arr.get_obj())
+        c = arr.reshape(x.shape[0], x.shape[1])
+        for i in range(start, start + step):
+            for j in range(x.shape[1]):
+                c[i, j] = gamma[j] * (x[i, j] - mean[j]) / np.sqrt(var[j] + epsilon)
+
     def run(self, counter):
         in_shape = self.in_node.shape
         x = self.in_node.result.reshape([-1, in_shape[3]])
 
-        self.result = np.zeros(x.shape)
-        for i in range(x.shape[0]):
-            for j in range(x.shape[1]):
-                self.result[i][j] = self.gamma[j] * (x[i][j] - self.mean[j]) / np.sqrt(self.variance[j] + self.epsilon)
+        #self.result = np.zeros(x.shape)
+        #for i in range(x.shape[0]):
+        #    for j in range(x.shape[1]):
+        #        self.result[i, j] = self.gamma[j] * (x[i, j] - self.mean[j]) / np.sqrt(self.variance[j] + self.epsilon)
+
+        self.arr = sharedctypes.Array('d', x.shape[0] * x.shape[1])
+        step = int(x.shape[0] / parallelism)
+        procs =[]
+
+        for i in range(0, parallelism):
+            proc = Process(target=self.norm, args=(x, self.gamma, self.mean, self.variance, self.epsilon, step * i, step))
+            procs.append(proc)
+            proc.start()
+
+        remain = x.shape[0] % parallelism
+        if remain != 0:
+            proc = Process(target=self.norm, args=(x, self.gamma, self.mean, self.variance, self.epsilon, step * parallelism, remain))
+            procs.append(proc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
+
+        self.result = np.frombuffer(self.arr.get_obj())
         self.result = self.result.reshape(in_shape)
 
 
@@ -384,13 +470,39 @@ class LeakyReLU(DnnNode):
         self.shape = in_node.shape
         print(self.name)
 
+    def leaky_relu(self, x, alpha, start, step):
+        arr = np.frombuffer(self.arr.get_obj())
+        c = arr.reshape(x.shape[0])
+        for i in range(start, start + step):
+            c[i] = max(alpha * x[i], x[i])
+
     def run(self, counter):
         in_shape = self.in_node.shape
         x = self.in_node.result.reshape(-1)
 
-        self.result = np.zeros(x.shape)
-        for i in range(x.shape[0]):
-            self.result[i] = max(self.alpha * x[i], x[i])
+        #self.result = np.zeros(x.shape)
+        #for i in range(x.shape[0]):
+        #    self.result[i] = max(self.alpha * x[i], x[i])
+
+        self.arr = sharedctypes.Array('d', x.shape[0])
+        step = int(x.shape[0] / parallelism)
+        procs =[]
+
+        for i in range(0, parallelism):
+            proc = Process(target=self.leaky_relu, args=(x, self.alpha, step * i, step))
+            procs.append(proc)
+            proc.start()
+
+        remain = x.shape[0] % parallelism
+        if remain != 0:
+            proc = Process(target=self.leaky_relu, args=(x, self.alpha, step * parallelism, remain))
+            procs.append(proc)
+            proc.start()
+
+        for proc in procs:
+            proc.join()
+
+        self.result = np.frombuffer(self.arr.get_obj())
         self.result = self.result.reshape(in_shape)
 
 
