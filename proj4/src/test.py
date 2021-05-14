@@ -3,7 +3,6 @@ import tensorflow as tf
 import numpy as np
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 from dnn import (
     Conv2D,
@@ -19,7 +18,8 @@ from dnn import (
 class TestConv2D(unittest.TestCase):
     def setUp(self):
         self.tf_g = tf.Graph()
-        self.tf_sess = tf.compat.v1.Session(graph=self.tf_g)
+        config = tf.ConfigProto(device_count={'GPU':0})
+        self.tf_sess = tf.compat.v1.Session(graph=self.tf_g, config=config)
 
         self.impl_g = DnnGraphBuilder()
         self.impl_sess = DnnInferenceEngine(self.impl_g, False)
@@ -93,7 +93,8 @@ class TestConv2D(unittest.TestCase):
 class TestMaxpool(unittest.TestCase):
     def setUp(self):
         self.tf_g = tf.Graph()
-        self.tf_sess = tf.compat.v1.Session(graph=self.tf_g)
+        config = tf.ConfigProto(device_count={'GPU':0})
+        self.tf_sess = tf.compat.v1.Session(graph=self.tf_g, config=config)
 
         self.impl_g = DnnGraphBuilder()
         self.impl_sess = DnnInferenceEngine(self.impl_g, False)
@@ -149,7 +150,8 @@ class TestMaxpool(unittest.TestCase):
 class TestMaxpool(unittest.TestCase):
     def setUp(self):
         self.tf_g = tf.Graph()
-        self.tf_sess = tf.compat.v1.Session(graph=self.tf_g)
+        config = tf.ConfigProto(device_count={'GPU':0})
+        self.tf_sess = tf.compat.v1.Session(graph=self.tf_g, config=config)
 
         self.impl_g = DnnGraphBuilder()
         self.impl_sess = DnnInferenceEngine(self.impl_g, False)
@@ -200,7 +202,8 @@ class TestMaxpool(unittest.TestCase):
 class TestBiasAdd(unittest.TestCase):
     def setUp(self):
         self.tf_g = tf.Graph()
-        self.tf_sess = tf.compat.v1.Session(graph=self.tf_g)
+        config = tf.ConfigProto(device_count={'GPU':0})
+        self.tf_sess = tf.compat.v1.Session(graph=self.tf_g, config=config)
 
         self.impl_g = DnnGraphBuilder()
         self.impl_sess = DnnInferenceEngine(self.impl_g, False)
