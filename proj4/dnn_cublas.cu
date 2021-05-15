@@ -40,3 +40,39 @@ void cublas_mul_float(float *a, float *b, float *c, int m, int k, int n)
 	cudaFree (d_c ); 
 	cublasDestroy ( handle ); 
 }
+
+extern "C"
+void cublas_max_pool_float(float *a, float *c, int m1, int m2, int m3)
+{
+    for (int i = 0; i < m1; i++) {
+        for (int j = 0; j < m3; j++) {
+            float max = a[i * m2 * m3 + j];
+            for (int k = 1; k < m2; k++) {
+                float tmp = a[i * m2 * m3 + k * m3 + j];
+                if (tmp > max) {
+                    max = tmp;
+                }
+
+            }
+            c[i * m3 + j] = max;
+        }
+    }
+}
+
+extern "C"
+void cublas_norm_float(float *a, float *c, int m, int k, float *gamma, float *mean, float* variance, float epsilon)
+{
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < k; j++) {
+            c[i * k + j] = gamma[j] * (a[i * k + j] - mean[j]) / sqrt(variance[j] + epsilon);
+        }
+    }
+}
+
+extern "C"
+void cublas_leaky_relu_float(float *a, float *c, int m)
+{
+    for (int i = 0; i < m; i++) {
+        c[i] = max(0.1 * a[i], a[i]);
+    }
+}

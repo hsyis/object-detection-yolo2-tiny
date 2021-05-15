@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 // Matrices are stored in row-major order:
 // M(row, col) = *(M.elements + row * M.stride + col)
 typedef struct {
@@ -136,4 +138,40 @@ void cuda_mul_float(float *a, float *b, float *c, int m, int k, int n)
     cudaFree(d_A.elements);
     cudaFree(d_B.elements);
     cudaFree(d_C.elements);
+}
+
+extern "C"
+void cuda_max_pool_float(float *a, float *c, int m1, int m2, int m3)
+{
+    for (int i = 0; i < m1; i++) {
+        for (int j = 0; j < m3; j++) {
+            float max = a[i * m2 * m3 + j];
+            for (int k = 1; k < m2; k++) {
+                float tmp = a[i * m2 * m3 + k * m3 + j];
+                if (tmp > max) {
+                    max = tmp;
+                }
+
+            }
+            c[i * m3 + j] = max;
+        }
+    }
+}
+
+extern "C"
+void cuda_norm_float(float *a, float *c, int m, int k, float *gamma, float *mean, float* variance, float epsilon)
+{
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < k; j++) {
+            c[i * k + j] = gamma[j] * (a[i * k + j] - mean[j]) / sqrt(variance[j] + epsilon);
+        }
+    }
+}
+
+extern "C"
+void cuda_leaky_relu_float(float *a, float *c, int m)
+{
+    for (int i = 0; i < m; i++) {
+        c[i] = max(0.1 * a[i], a[i]);
+    }
 }

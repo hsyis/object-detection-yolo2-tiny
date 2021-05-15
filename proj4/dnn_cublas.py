@@ -192,6 +192,7 @@ class Conv2D(DnnNode):
             x.shape[1],
             w.shape[1])
 
+        self.result = np.ascontiguousarray(self.result)
         self.result = self.result.reshape([self.n_in, self.h_out, self.w_out, self.n_ker])
         tok = time.time() - tik
         print("conv 2d : %.3f" % tok)
@@ -263,7 +264,15 @@ class MaxPool2D(DnnNode):
         x_shape = x.shape
         x = x.reshape([x_shape[0] * x_shape[1] * x_shape[2], x_shape[3] * x_shape[4], -1])
 
-        self.result = np.max(x, axis=1)
+        #self.result = np.max(x, axis=1)
+        self.result = np.zeros((x.shape[0], x.shape[2]), dtype=np.float32)
+        mylib.cublas_max_pool_float(
+            x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.result.ctypes.data_as(POINTER(c_float)),
+            x.shape[0],
+            x.shape[1],
+            x.shape[2])
+
         self.result = self.result.reshape([x_shape[0], x_shape[1], x_shape[2], -1])
         tok = time.time() - tik
         print("max pool 2d : %.3f" % tok)
@@ -290,11 +299,26 @@ class BatchNorm(DnnNode):
 
     def run(self):
         tik = time.time()
-        n, h, w, c = self.in_node.result.shape
-        bn = lambda x, m, v, g: g * ((x - m) / np.sqrt(v + self.epsilon))
-        for i in range(h):
-            for j in range(w):
-                self.result[0, i, j] = np.vectorize(bn)(self.in_node.result[0, i, j], self.mean, self.variance, self.gamma)
+        #n, h, w, c = self.in_node.result.shape
+        #bn = lambda x, m, v, g: g * ((x - m) / np.sqrt(v + self.epsilon))
+        #for i in range(h):
+        #    for j in range(w):
+        #        self.result[0, i, j] = np.vectorize(bn)(self.in_node.result[0, i, j], self.mean, self.variance, self.gamma)
+        in_shape = self.in_node.result.shape
+        x = self.in_node.result.reshape([-1, in_shape[3]])
+        self.result = np.zeros(x.shape, dtype=np.float32)
+
+        mylib.cublas_norm_float(
+            x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.result.ctypes.data_as(POINTER(c_float)),
+            x.shape[0],
+            x.shape[1],
+            self.gamma.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.mean.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.variance.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            c_float(self.epsilon))
+
+        self.result = self.result.reshape(in_shape)
         tok = time.time() - tik
         print("batch norm : %.3f" % tok)
 
@@ -307,9 +331,16 @@ class LeakyReLU(DnnNode):
 
     def run(self):
         tik = time.time()
-        leaky_relu = lambda x: max(0.1*x, x)
-        leaky_relu_layer = np.vectorize(leaky_relu)
-        self.result = leaky_relu_layer(self.in_node.result)
+        #leaky_relu = lambda x: max(0.1*x, x)
+        #leaky_relu_layer = np.vectorize(leaky_relu)
+        #self.result = leaky_relu_layer(self.in_node.result)
+        self.result = np.zeros(self.in_node.result.shape, dtype=np.float32)
+
+        mylib.cublas_leaky_relu_float(
+            self.in_node.result.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.result.ctypes.data_as(POINTER(c_float)),
+            self.result.size)
+
         tok = time.time() - tik
         print("leaky relu : %.3f" % tok)
 
