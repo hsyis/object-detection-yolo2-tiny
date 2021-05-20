@@ -3,8 +3,6 @@ import sys
 import math
 import networkx as nx
 import numpy as np
-import multiprocessing as mp
-import time
 from ctypes import *
 
 mylib = cdll.LoadLibrary('./lib_dnn_cublas.so')
@@ -141,14 +139,6 @@ class Conv2D(DnnNode):
 
         print(self.name)
 
-    def multiprocess_worker(self, n, start_h, end_h):
-        res = np.ndarray((end_h - start_h, self.w_out, self.n_ker))
-        for h in range(start_h, end_h):
-            for w in range(self.w_out):
-                for n_k in range(self.n_ker):
-                    res[h-start_h, w, n_k] = np.sum(np.multiply(self.img_pad[n, h*self.h_stride : h*self.h_stride+self.h_ker, w*self.w_stride:w*self.w_stride+self.w_ker,:], self.kernel[:,:,:,n_k]))
-        return res
-
     def run(self):
         top_pad = self.h_pad//2
         bot_pad = self.h_pad - top_pad
@@ -157,15 +147,7 @@ class Conv2D(DnnNode):
         right_pad = self.w_pad - left_pad
 
         self.img_pad = np.pad(self.in_node.result, ((0,0),(top_pad, bot_pad), (left_pad, right_pad),(0,0)), 'constant', constant_values=(0))
-        #num_process = 8
 
-        #for n in range(self.n_in):
-        #    loopCnt = math.ceil(self.h_out / float(num_process))
-        #    with mp.Pool(processes=num_process, initializer=None, initargs=None) as pool:
-        #        res = pool.starmap(self.multiprocess_worker, [[n, i*num_process, min((i+1)*num_process, self.h_out)] for i in range(loopCnt)])
-        #        self.result[n] = np.vstack(res)
-
-        tik = time.time()
         x = np.zeros([self.n_in, self.h_out, self.w_out, self.h_ker, self.w_ker, self.c_in])
         for i in range(self.h_out):
             ih = i * self.h_stride
@@ -183,7 +165,6 @@ class Conv2D(DnnNode):
 
         self.result = np.zeros((x.shape[0], w.shape[1]), dtype=np.float32, order='F')
 
-        #self.result = x.dot(w)
         mylib.cublas_mul_float(
             x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
             w.astype(np.float32).ctypes.data_as(POINTER(c_float)),
@@ -194,8 +175,6 @@ class Conv2D(DnnNode):
 
         self.result = np.ascontiguousarray(self.result)
         self.result = self.result.reshape([self.n_in, self.h_out, self.w_out, self.n_ker])
-        tok = time.time() - tik
-        print("conv 2d : %.3f" % tok)
       
 class BiasAdd(DnnNode):
     def __init__(self, name, in_node, biases):
@@ -248,12 +227,6 @@ class MaxPool2D(DnnNode):
 
         img_pad = np.pad(self.in_node.result, ((0,0),(top_pad, bot_pad), (left_pad, right_pad),(0,0)), 'edge')
     
-        tik = time.time()
-        #for n in range(self.n_in):
-        #    for h in range(self.h_out):
-        #        for w in range(self.w_out):
-        #            for c in range(self.c_in):
-        #                self.result[n, h, w, c] = np.max(img_pad[n, h*self.h_stride : h*self.h_stride + self.h_ker, w*self.w_stride : w*self.w_stride + self.w_ker, c])
         x = np.zeros([self.n_in, self.h_out, self.w_out, self.h_ker, self.w_ker, self.c_in])
         for i in range(self.h_out):
             ih = i * self.h_stride
@@ -264,7 +237,6 @@ class MaxPool2D(DnnNode):
         x_shape = x.shape
         x = x.reshape([x_shape[0] * x_shape[1] * x_shape[2], x_shape[3] * x_shape[4], -1])
 
-        #self.result = np.max(x, axis=1)
         self.result = np.zeros((x.shape[0], x.shape[2]), dtype=np.float32)
         mylib.cublas_max_pool_float(
             x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
@@ -274,8 +246,6 @@ class MaxPool2D(DnnNode):
             x.shape[2])
 
         self.result = self.result.reshape([x_shape[0], x_shape[1], x_shape[2], -1])
-        tok = time.time() - tik
-        print("max pool 2d : %.3f" % tok)
         
 
 class BatchNorm(DnnNode):
@@ -298,12 +268,6 @@ class BatchNorm(DnnNode):
         print(self.name)
 
     def run(self):
-        tik = time.time()
-        #n, h, w, c = self.in_node.result.shape
-        #bn = lambda x, m, v, g: g * ((x - m) / np.sqrt(v + self.epsilon))
-        #for i in range(h):
-        #    for j in range(w):
-        #        self.result[0, i, j] = np.vectorize(bn)(self.in_node.result[0, i, j], self.mean, self.variance, self.gamma)
         in_shape = self.in_node.result.shape
         x = self.in_node.result.reshape([-1, in_shape[3]])
         self.result = np.zeros(x.shape, dtype=np.float32)
@@ -319,8 +283,6 @@ class BatchNorm(DnnNode):
             c_float(self.epsilon))
 
         self.result = self.result.reshape(in_shape)
-        tok = time.time() - tik
-        print("batch norm : %.3f" % tok)
 
 class LeakyReLU(DnnNode):
     def __init__(self, name, in_node):
@@ -330,10 +292,6 @@ class LeakyReLU(DnnNode):
         print(self.name)
 
     def run(self):
-        tik = time.time()
-        #leaky_relu = lambda x: max(0.1*x, x)
-        #leaky_relu_layer = np.vectorize(leaky_relu)
-        #self.result = leaky_relu_layer(self.in_node.result)
         self.result = np.zeros(self.in_node.result.shape, dtype=np.float32)
 
         mylib.cublas_leaky_relu_float(
@@ -341,8 +299,6 @@ class LeakyReLU(DnnNode):
             self.result.ctypes.data_as(POINTER(c_float)),
             self.result.size)
 
-        tok = time.time() - tik
-        print("leaky relu : %.3f" % tok)
 
 
 # Do not modify below

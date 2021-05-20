@@ -101,9 +101,29 @@ __device__ void SetElement(Matrix A, int row, int col,
 extern "C"
 void cuda_mul_float(float *a, float *b, float *c, int m, int k, int n)
 {
-    Matrix A = { .width = k, .height = m, .stride = k, .elements = a };
-    Matrix B = { .width = n, .height = k, .stride = n, .elements = b };
-    Matrix C = { .width = n, .height = m, .stride = n, .elements = c };
+    int m16 = m % 16 ? m + (16 - m % 16) : m;
+    int k16 = k % 16 ? k + (16 - k % 16) : k;
+    int n16 = n % 16 ? n + (16 - n % 16) : n;
+
+    float *a16_16 = (float *)calloc(m16 * k16, sizeof(float *));
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < k; j++) {
+            a16_16[i * k16 + j] = a[i * k + j];
+        }
+    }
+
+    float *b16_16 = (float *)calloc(k16 * n16, sizeof(float *));
+    for (int i = 0; i < k; i++) {
+        for (int j = 0; j < n; j++) {
+            b16_16[i * n16 + j] = b[i * n + j];
+        }
+    }
+
+    float *c16_16 = (float *)calloc(m16 * n16, sizeof(float *));
+
+    Matrix A = { .width = k16, .height = m16, .stride = k16, .elements = a16_16 };
+    Matrix B = { .width = n16, .height = k16, .stride = n16, .elements = b16_16 };
+    Matrix C = { .width = n16, .height = m16, .stride = n16, .elements = c16_16 };
 
     // Load A and B to device memory
     Matrix d_A;
@@ -134,10 +154,22 @@ void cuda_mul_float(float *a, float *b, float *c, int m, int k, int n)
     cudaMemcpy(C.elements, d_C.elements, size,
                cudaMemcpyDeviceToHost);
 
+    // Reasign
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < n; j++) {
+            c[i * n + j] = c16_16[i * n16 + j];
+        }
+    }
+
     // Free device memory
     cudaFree(d_A.elements);
     cudaFree(d_B.elements);
     cudaFree(d_C.elements);
+
+    // Free host memory
+    free(a16_16);
+    free(b16_16);
+    free(c16_16);
 }
 
 extern "C"
