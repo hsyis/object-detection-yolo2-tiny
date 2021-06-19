@@ -180,13 +180,24 @@ class Conv2D(DnnNode):
             w = np.asfortranarray(w)
 
         self.result = np.zeros((x.shape[0], w.shape[1]), dtype=np.float32, order='F')
-        mylib.cuda_mul_float(
-            x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-            w.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-            self.result.ctypes.data_as(POINTER(c_float)),
-            x.shape[0],
-            x.shape[1],
-            w.shape[1])
+        if precision == np.int8:
+            mylib.cuda_mul_float(
+                x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+                w.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+                self.result.ctypes.data_as(POINTER(c_float)),
+                c_float(abs(max(x.min(), x.max(), key=abs))),
+                c_float(abs(max(w.min(), w.max(), key=abs))),
+                x.shape[0],
+                x.shape[1],
+                w.shape[1])
+        else:
+            mylib.cuda_mul_float(
+                x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+                w.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+                self.result.ctypes.data_as(POINTER(c_float)),
+                x.shape[0],
+                x.shape[1],
+                w.shape[1])
 
         self.result = np.ascontiguousarray(self.result)
         self.result = self.result.reshape([self.n_in, self.h_out, self.w_out, self.n_ker])

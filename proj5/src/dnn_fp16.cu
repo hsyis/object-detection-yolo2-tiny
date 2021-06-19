@@ -120,3 +120,39 @@ void cuda_leaky_relu_float(float *a, float *c, int m)
         c[i] = max(0.1 * a[i], a[i]);
     }
 }
+
+extern "C"
+void cuda_max_pool_half(half *a, half *c, int m1, int m2, int m3)
+{
+    for (int i = 0; i < m1; i++) {
+        for (int j = 0; j < m3; j++) {
+            float max = a[i * m2 * m3 + j];
+            for (int k = 1; k < m2; k++) {
+                float tmp = a[i * m2 * m3 + k * m3 + j];
+                if (tmp > max) {
+                    max = tmp;
+                }
+
+            }
+            c[i * m3 + j] = __float2half(max);
+        }
+    }
+}
+
+extern "C"
+void cuda_norm_half(half *a, half *c, int m, int k, float *gamma, float *mean, float* variance, float epsilon)
+{
+    for (int i = 0; i < m; i++) {
+        for (int j = 0; j < k; j++) {
+            c[i * k + j] = __float2half(gamma[j] * (__half2float(a[i * k + j]) - mean[j]) / sqrt(variance[j] + epsilon));
+        }
+    }
+}
+
+extern "C"
+void cuda_leaky_relu_half(half *a, half *c, int m)
+{
+    for (int i = 0; i < m; i++) {
+        c[i] = __float2half(max(0.1 * __half2float(a[i]), __half2float(a[i])));
+    }
+}

@@ -14,7 +14,7 @@ __global__ void postproc(float *in, float max2) {
 }
 
 extern "C"
-void cuda_mul_float(float *a, float *b, float *c, int m, int k, int n)
+void cuda_mul_float(float *a, float *b, float *c, float a_max, float b_max, int m, int k, int n)
 {
     clock_t begin;
 
@@ -46,14 +46,14 @@ void cuda_mul_float(float *a, float *b, float *c, int m, int k, int n)
 
     begin = clock();
 
-    int a_max_idx;
-    int b_max_idx;
+    //int a_max_idx;
+    //int b_max_idx;
 
-    cublasIsamax(handle, m * k, d_a, 1, &a_max_idx);
-    cublasIsamax(handle, k * n, d_b, 1, &b_max_idx);
+    //cublasIsamax(handle, m * k, d_a, 1, &a_max_idx);
+    //cublasIsamax(handle, k * n, d_b, 1, &b_max_idx);
 
-    float a_max = a[a_max_idx];
-    float b_max = b[b_max_idx];
+    //float a_max = a[a_max_idx];
+    //float b_max = b[b_max_idx];
 
     double time_comp1 = (double)(clock() - begin) /CLOCKS_PER_SEC;
 
