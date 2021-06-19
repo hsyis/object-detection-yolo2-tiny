@@ -44,19 +44,6 @@ void cuda_mul_float(float *a, float *b, float *c, float a_max, float b_max, int 
 
     double time_mcpy1 = (double)(clock() - begin) /CLOCKS_PER_SEC;
 
-    begin = clock();
-
-    //int a_max_idx;
-    //int b_max_idx;
-
-    //cublasIsamax(handle, m * k, d_a, 1, &a_max_idx);
-    //cublasIsamax(handle, k * n, d_b, 1, &b_max_idx);
-
-    //float a_max = a[a_max_idx];
-    //float b_max = b[b_max_idx];
-
-    double time_comp1 = (double)(clock() - begin) /CLOCKS_PER_SEC;
-
     // type conv
     begin = clock();
 
@@ -86,7 +73,7 @@ void cuda_mul_float(float *a, float *b, float *c, float a_max, float b_max, int 
     dim3 grid_c(m * n, 1);
     postproc<<<grid_c, 1>>>(d_c, a_max * b_max);
 
-    double time_comp2 = (double)(clock() - begin) /CLOCKS_PER_SEC;
+    double time_comp = (double)(clock() - begin) /CLOCKS_PER_SEC;
 
     begin = clock();
 
@@ -103,7 +90,7 @@ void cuda_mul_float(float *a, float *b, float *c, float a_max, float b_max, int 
 
     printf("type conversion: %f\n", time_conv);
     printf("memory copy: %f, (up: %f, down: %f)\n", time_mcpy1 + time_mcpy2, time_mcpy1, time_mcpy2);
-    printf("computation: %f, (Isamax: %f, GemmEx: %f)\n", time_comp1 + time_comp2, time_comp1, time_comp2);
+    printf("computation: %f\n", time_comp);
 }
 
 extern "C"
