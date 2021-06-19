@@ -37,7 +37,7 @@ def image_object_detection(in_image, out_image, precision):
 
     tout = np.squeeze(tout)
 
-    assert(tout.dtype == np_dtype[precision])
+    #assert(tout.dtype == np_dtype[precision])
 
     np.save(precision, tout)
 
@@ -57,7 +57,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("IN_IMAGE", help="path to the input jpg")
     parser.add_argument("OUT_IMAGE", help="path to the output jpg")
-    parser.add_argument("PRECISION", choice=np_dtype.keys(),
+    parser.add_argument("PRECISION", choices=np_dtype.keys(),
                         help="Precision used for convolution")
     args = parser.parse_args()
 

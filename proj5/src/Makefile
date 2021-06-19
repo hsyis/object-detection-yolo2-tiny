@@ -12,7 +12,7 @@ lib_dnn_fp32.so: dnn_fp32.cu
 	nvcc -Xcompiler -fPIC -shared -o $@ $^ -lcublas
 
 lib_dnn_fp16.so: dnn_fp16.cu
-	nvcc -Xcompiler -fPIC -shared -o $@ $^ -lcublas
+	nvcc -Xcompiler -fPIC -shared -o $@ $^ -lcublas -arch=sm_75
 
 lib_dnn_int8.so: dnn_int8.cu
 	nvcc -Xcompiler -fPIC -shared -o $@ $^ -lcublas

@@ -1,9 +1,13 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
+#include <stdio.h>
+#include <time.h>
 
 extern "C"
 void cuda_mul_float(float *a, float *b, float *c, int m, int k, int n)
 {
+    clock_t begin;
+
 	cublasHandle_t handle; 
 	
 	float * d_a; 
@@ -16,12 +20,18 @@ void cuda_mul_float(float *a, float *b, float *c, int m, int k, int n)
 
 	cublasCreate (& handle ); 
 	
+    begin = clock();
+
 	cublasSetMatrix (m,k, sizeof (*a) ,a,m,d_a ,m); 
 	cublasSetMatrix (k,n, sizeof (*b) ,b,k,d_b ,k); 
 	cublasSetMatrix (m,n, sizeof (*c) ,c,m,d_c ,m); 
 
+    double time_mcpy1 = (double)(clock() - begin) /CLOCKS_PER_SEC;
+
 	float al =1.0f; 
 	float bet =0.0f; 
+
+    begin = clock();
 
     // column-major    
 	cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N,
@@ -34,12 +44,21 @@ void cuda_mul_float(float *a, float *b, float *c, int m, int k, int n)
         CUDA_R_32F, CUBLAS_GEMM_DFALT_TENSOR_OP
     );
 
+    double time_comp = (double)(clock() - begin) /CLOCKS_PER_SEC;
+
+    begin = clock();
+
 	cublasGetMatrix (m,n, sizeof (*c) ,d_c ,m,c,m); 
+
+    double time_mcpy2 = (double)(clock() - begin) /CLOCKS_PER_SEC;
 
 	cudaFree (d_a ); 
 	cudaFree (d_b ); 
 	cudaFree (d_c ); 
 	cublasDestroy ( handle ); 
+
+    printf("memory copy: %f, (up: %f, down: %f)\n", time_mcpy1 + time_mcpy2, time_mcpy1, time_mcpy2);
+    printf("computation: %f\n", time_comp);
 }
 
 extern "C"

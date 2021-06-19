@@ -187,7 +187,7 @@ class YOLO2_TINY(object):
     def __init__(self, in_shape, onnx_path, precision):
         self.precision = precision
         self.onnx_path = onnx_path
-        self.g = DnnGraphBuilder()
+        self.g = DnnGraphBuilder(precision)
         self.build_graph(in_shape)
         self.sess = DnnInferenceEngine(self.g, precision)
 

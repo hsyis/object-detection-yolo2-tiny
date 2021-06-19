@@ -156,7 +156,6 @@ class Conv2D(DnnNode):
         print(self.name)
 
     def run(self, precision):
-        print(self.name, "inp", self.in_node.result.dtype)
         top_pad = self.h_pad//2
         bot_pad = self.h_pad - top_pad
 
@@ -180,33 +179,17 @@ class Conv2D(DnnNode):
         if w.flags['C_CONTIGUOUS']:
             w = np.asfortranarray(w)
 
-        if precision == np.int8:
-            self.result = np.zeros((x.shape[0], w.shape[1]), dtype=np.float32, order='F')
-            x_coeff = 127 / x.max();
-            w_coeff = 127 / w.max();
-            x = (x * x_coeff).astype(np.int8)
-            w = (w * w_coeff).astype(np.int8)
-            mylib.cuda_mul_float(
-                x.astype(precision).ctypes.data_as(POINTER(c_int8)),
-                w.astype(precision).ctypes.data_as(POINTER(c_int8)),
-                self.result.ctypes.data_as(POINTER(c_float)),
-                x.shape[0],
-                x.shape[1],
-                w.shape[1])
-            self.result /= (x_coeff * w_coeff)
-        else:
-            self.result = np.zeros((x.shape[0], w.shape[1]), dtype=precision, order='F')
-            mylib.cuda_mul_float(
-                x.astype(precision).ctypes.data_as(POINTER(c_float)),
-                w.astype(precision).ctypes.data_as(POINTER(c_float)),
-                self.result.ctypes.data_as(POINTER(c_float)),
-                x.shape[0],
-                x.shape[1],
-                w.shape[1])
+        self.result = np.zeros((x.shape[0], w.shape[1]), dtype=np.float32, order='F')
+        mylib.cuda_mul_float(
+            x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            w.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.result.ctypes.data_as(POINTER(c_float)),
+            x.shape[0],
+            x.shape[1],
+            w.shape[1])
 
         self.result = np.ascontiguousarray(self.result)
         self.result = self.result.reshape([self.n_in, self.h_out, self.w_out, self.n_ker])
-        print(self.name, "res", self.result.dtype)
       
 class BiasAdd(DnnNode):
     def __init__(self, name, in_node, biases):
@@ -220,12 +203,7 @@ class BiasAdd(DnnNode):
         print(self.name)
 
     def run(self, precision):
-        print(self.name, "inp", self.in_node.result.dtype)
-        if precision == np.int8:
-            self.result = self.in_node.result + self.biases.astype(np.float32)
-        else:
-            self.result = self.in_node.result + self.biases.astype(precision)
-        print(self.name, "res", self.result.dtype)
+        self.result = self.in_node.result + self.biases.astype(np.float32)
 
 class MaxPool2D(DnnNode):
     def __init__(self, name, in_node, ksize, strides, padding):
@@ -256,7 +234,6 @@ class MaxPool2D(DnnNode):
         print(self.name)
 
     def run(self, precision):
-        print(self.name, "inp", self.in_node.result.dtype)
         top_pad = self.h_pad//2
         bot_pad = self.h_pad - top_pad
 
@@ -275,25 +252,15 @@ class MaxPool2D(DnnNode):
         x_shape = x.shape
         x = x.reshape([x_shape[0] * x_shape[1] * x_shape[2], x_shape[3] * x_shape[4], -1])
 
-        if precision == np.int8:
-            self.result = np.zeros((x.shape[0], x.shape[2]), dtype=np.float32)
-            mylib.cuda_max_pool_float(
-                x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                self.result.ctypes.data_as(POINTER(c_float)),
-                x.shape[0],
-                x.shape[1],
-                x.shape[2])
-        else:
-            self.result = np.zeros((x.shape[0], x.shape[2]), dtype=precision)
-            mylib.cuda_max_pool_float(
-                x.astype(precision).ctypes.data_as(POINTER(c_float)),
-                self.result.ctypes.data_as(POINTER(c_float)),
-                x.shape[0],
-                x.shape[1],
-                x.shape[2])
+        self.result = np.zeros((x.shape[0], x.shape[2]), dtype=np.float32)
+        mylib.cuda_max_pool_float(
+            x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.result.ctypes.data_as(POINTER(c_float)),
+            x.shape[0],
+            x.shape[1],
+            x.shape[2])
 
         self.result = self.result.reshape([x_shape[0], x_shape[1], x_shape[2], -1])
-        print(self.name, "res", self.result.dtype)
         
 
 class BatchNorm(DnnNode):
@@ -316,35 +283,21 @@ class BatchNorm(DnnNode):
         print(self.name)
 
     def run(self, precision):
-        print(self.name, "inp", self.in_node.result.dtype)
         in_shape = self.in_node.result.shape
         x = self.in_node.result.reshape([-1, in_shape[3]])
 
-        if precision == np.int8:
-            self.result = np.zeros(x.shape, dtype=np.float32)
-            mylib.cuda_norm_float(
-                x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                self.result.ctypes.data_as(POINTER(c_float)),
-                x.shape[0],
-                x.shape[1],
-                self.gamma.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                self.mean.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                self.variance.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                c_float(self.epsilon))
-        else:
-            self.result = np.zeros(x.shape, dtype=precision)
-            mylib.cuda_norm_float(
-                x.astype(precision).ctypes.data_as(POINTER(c_float)),
-                self.result.ctypes.data_as(POINTER(c_float)),
-                x.shape[0],
-                x.shape[1],
-                self.gamma.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                self.mean.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                self.variance.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                c_float(self.epsilon))
+        self.result = np.zeros(x.shape, dtype=np.float32)
+        mylib.cuda_norm_float(
+            x.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.result.ctypes.data_as(POINTER(c_float)),
+            x.shape[0],
+            x.shape[1],
+            self.gamma.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.mean.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.variance.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            c_float(self.epsilon))
 
         self.result = self.result.reshape(in_shape)
-        print(self.name, "res", self.result.dtype)
 
 class LeakyReLU(DnnNode):
     def __init__(self, name, in_node):
@@ -354,21 +307,11 @@ class LeakyReLU(DnnNode):
         print(self.name)
 
     def run(self, precision):
-        print(self.name, "inp", self.in_node.result.dtype)
-
-        if precision == np.int8:
-            self.result = np.zeros(self.in_node.result.shape, dtype=np.float32)
-            mylib.cuda_leaky_relu_float(
-                self.in_node.result.astype(np.float32).ctypes.data_as(POINTER(c_float)),
-                self.result.ctypes.data_as(POINTER(c_float)),
-                self.result.size)
-        else:
-            self.result = np.zeros(self.in_node.result.shape, dtype=precision)
-            mylib.cuda_leaky_relu_float(
-                self.in_node.result.astype(precision).ctypes.data_as(POINTER(c_float)),
-                self.result.ctypes.data_as(POINTER(c_float)),
-                self.result.size)
-        print(self.name, "res", self.result.dtype)
+        self.result = np.zeros(self.in_node.result.shape, dtype=np.float32)
+        mylib.cuda_leaky_relu_float(
+            self.in_node.result.astype(np.float32).ctypes.data_as(POINTER(c_float)),
+            self.result.ctypes.data_as(POINTER(c_float)),
+            self.result.size)
 
 
 
@@ -381,12 +324,7 @@ class Input(DnnNode):
 
     def set_input(self, tensor, precision):
         assert tuple(self.in_shape) == tuple(tensor.shape)
-        print(self.name, "iop", tensor.dtype)
-        if precision == np.int8:
-            self.result = tensor.astype(np.float32)
-        else:
-            self.result = tensor.astype(precision)
-        print(self.name, "res", self.result.dtype)
+        self.result = tensor.astype(np.float32)
 
     def run(self, precision):
         pass
