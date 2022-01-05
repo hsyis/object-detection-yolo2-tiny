@@ -1,1 +1,3 @@
-# kaist-cs492
+# Real-time object detection with YOLO v2 tiny using Tensorflow.
+
+This project aims to build a tensor graph for the Yolo2 tiny algorithm using TensorFlow and perform object detection on video streams in real-time. I used OpenCV-Python for video processing and ONNX model for building TensorFlow graph. I implemented it in Python first and then implemented the bottleneck part in C using python binding. I sequentially applied AVX & Pthread, cuBLAS, and CUDA to compare performance on CPU and GPU. Finally, I concluded that using half-precision floating-point type (FP16) in inference computation is effective.
